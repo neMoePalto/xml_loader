@@ -41,11 +41,11 @@ void tcp_server::close() {
 
 
 void tcp_server::send_to_client(std::uint16_t port_to, const QByteArray& data) {
-  // Метод раздает идентичную информацию всем клиентам.
-  // TODO: В будущем: реализовать выборочную передачу.
   for (auto* sock : server_->findChildren<QTcpSocket*>()) {
-    sock->write(data);
-    qDebug() << "send to port " << sock->peerPort();
+    if (sock->peerPort() == port_to) {
+      sock->write(data);
+      qDebug() << "send to port " << sock->peerPort();
+    }
   }
 }
 

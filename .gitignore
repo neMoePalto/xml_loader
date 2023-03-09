@@ -3,3 +3,4 @@ build/
 *.user
 *.doc
 *.doc#
+temp_xml_reader/

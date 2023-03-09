@@ -4,7 +4,7 @@
 		<port id="10203001" Num="1" Media="3" Signal="2"/>
 		<port id="10203002" Num="2" Media="3" Signal="2"/>
 	</board>
-	<board id="10204000" Num="4" Name="KM-120" PortCount="0" />
+	<board id="10209000" Num="4" Name="KM-120" PortCount="0" />
 	<board id="10204000" Num="8" Name="CO-120" PortCount="2" IntLinks="5:11|5:12" Algoritms="44,55">
 		<port id="10208001" Num="1" Media="3" Signal="1"/>
 		<port id="10208002" Num="2" Media="3" Signal="1"/>
