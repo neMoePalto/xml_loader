@@ -1,7 +1,9 @@
 #include "data_server.h"
 
 #include <array>
-#include <vector>
+
+#include <netinet/in.h>
+#include <string.h>
 
 #include <QByteArray>
 #include <QDebug>
@@ -19,7 +21,10 @@
 namespace xml_loader {
 
 
-data_server::data_server() {
+data_server::data_server()
+  : tables_{{"blocks", "id, Name, IP, BoardCount, MtR, MtC, Description, Label"},
+            {"boards", "id, Num, Name, PortCount, IntLinks, Algoritms, block_id"},
+            {"ports",  "id, Num, Media, Signal, board_id"}} {
   // Подключаемся к БД:
   QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE");
 //  db.setHostName("some_host");
@@ -31,15 +36,14 @@ data_server::data_server() {
   }
 
   // Создаем (или пересоздаем) таблицы БД:
-  const std::vector<QString> table_names{"blocks", "boards", "ports"};
-  for (const auto& name : table_names) {
-    QSqlQuery query("DROP TABLE IF EXISTS " + name);
+  for (const auto& t : tables_) {
+    QSqlQuery query("DROP TABLE IF EXISTS " + t.name);
     if (query.lastError().isValid()) {
       qDebug() << query.lastError();
     }
   }
 
-  QSqlQuery q1("CREATE TABLE " + table_names.at(0) + " ("
+  QSqlQuery q1("CREATE TABLE " + tables_.at(0).name + " ("
                "id          INT  NOT NULL PRIMARY KEY, "
                "Name        TEXT NOT NULL, "
                "IP          TEXT NOT NULL, "
@@ -53,7 +57,7 @@ data_server::data_server() {
   }
 
   // TODO: По-хорошему, стоит сделать отдельную таблицу для Algoritms [board_id, Algoritm]:
-  QSqlQuery q2("CREATE TABLE " + table_names.at(1) + " ("
+  QSqlQuery q2("CREATE TABLE " + tables_.at(1).name + " ("
                "id        INT  NOT NULL PRIMARY KEY, "
                "Num       INT  NOT NULL, "
                "Name      TEXT NOT NULL, "
@@ -65,8 +69,8 @@ data_server::data_server() {
     qFatal("%s", db.lastError().text().toStdString().c_str());
   }
 
-  QSqlQuery q3("CREATE TABLE " + table_names.at(2) + " ("
-               "id       INT NOT NULL PRIMARY KEY, " // Почитать что значит NOT NULL и PRIMARY KEY
+  QSqlQuery q3("CREATE TABLE " + tables_.at(2).name + " ("
+               "id       INT NOT NULL PRIMARY KEY, "
                "Num      INT NOT NULL, "
                "Media    INT NOT NULL, "
                "Signal   INT NOT NULL, "
@@ -86,15 +90,14 @@ data_server::data_server() {
     qFatal("%s", info.toStdString().c_str());
   }
 
-  auto insert_into_blocks_table = [table_name = table_names.at(0), this](const QDomNode& block_node) -> std::int32_t {
+  auto insert_into_blocks_table = [table = tables_.at(0), this] (const QDomNode& block_node) -> std::int32_t {
     if (block_node.nodeName() != "block") {
       qDebug() << "Error: unexpected xml-node" << block_node.nodeName() << "in file" << xml_path_;
     }
 
     QSqlQuery query;
-    query.prepare("INSERT INTO " + table_name +
-                  " (id, Name, IP, BoardCount, MtR, MtC, Description, Label)"
-                  " VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    query.prepare("INSERT INTO " + table.name +
+                  " (" + table.fields + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
 
     auto el = block_node.toElement();
     std::array<bool, 4> converted{false, false, false, false};
@@ -111,7 +114,7 @@ data_server::data_server() {
     const auto it = std::find(converted.cbegin(), converted.cend(), false);
     if (it != converted.cend()) {
       qDebug() << "Error: xml attribute has type unconvertable to int. "
-                  "Skip insertion into DB table" << table_name;
+                  "Skip insertion into DB table" << table.name;
       return -1;
     }
 
@@ -124,15 +127,15 @@ data_server::data_server() {
     return id; // TODO: В будущем - заменить на std::optional<>, которого пока нет в С++14
   };
 
-  auto insert_into_ports_table = [table_name = table_names.at(2), this](const QDomNode& board_node, std::int32_t board_id) {
+  auto insert_into_ports_table = [table = tables_.at(2), this](const QDomNode& board_node, std::int32_t board_id) {
     for (auto node = board_node.firstChild(); !node.isNull(); node = node.nextSibling()) {
       if (node.nodeName() != "port") {
         qDebug() << "Error: unexpected xml-node" << node.nodeName() << "in file" << xml_path_;
       }
 
       QSqlQuery query;
-      query.prepare("INSERT INTO " + table_name +
-                    " (id, Num, Media, Signal, board_id) VALUES (?, ?, ?, ?, ?)");
+      query.prepare("INSERT INTO " + table.name +
+                    " (" + table.fields + ") VALUES (?, ?, ?, ?, ?)");
 
       auto el = node.toElement();
       std::array<bool, 4> converted{false, false, false, false};
@@ -145,7 +148,7 @@ data_server::data_server() {
       const auto it = std::find(converted.cbegin(), converted.cend(), false);
       if (it != converted.cend()) {
         qDebug() << "Error: xml attribute has type unconvertable to int. "
-                    "Skip insertion into DB table" << table_name;
+                    "Skip insertion into DB table" << table.name;
         continue;
       }
 
@@ -156,15 +159,15 @@ data_server::data_server() {
     }
   };
 
-  auto insert_into_boards_table = [table_name = table_names.at(1), this, insert_into_ports_table](const QDomNode& block_node,
-                                                                                                  std::int32_t block_id) {
+  auto insert_into_boards_table = [table = tables_.at(1), this, insert_into_ports_table](const QDomNode& block_node,
+                                                                                         std::int32_t block_id) {
     for (auto node = block_node.firstChild(); !node.isNull(); node = node.nextSibling()) {
       if (node.nodeName() != "board") {
         qDebug() << "Error: unexpected xml-node" << node.nodeName() << "in file" << xml_path_;
       }
 
       QSqlQuery query;
-      query.prepare("INSERT INTO " + table_name +
+      query.prepare("INSERT INTO " + table.name +
                  " (id, Num, Name, PortCount, IntLinks, Algoritms, block_id)"
                  " VALUES (?, ?, ?, ?, ?, ?, ?)");
 
@@ -182,7 +185,7 @@ data_server::data_server() {
       const auto it = std::find(converted.cbegin(), converted.cend(), false);
       if (it != converted.cend()) {
         qDebug() << "Error: xml attribute has type unconvertable to int. "
-                    "Skip insertion into DB table" << table_name;
+                    "Skip insertion into DB table" << table.name;
         continue;
       }
 
@@ -240,21 +243,51 @@ data_server::data_server() {
     qDebug() << "Connection from port" << port << "closed";
   });
 
-  connect(tcp_server_, &tcp_server::have_data, [this](std::vector<char>& data, std::uint16_t port) {
-    if (!data.empty()) {
-      if (data.at(0) == static_cast<char>(messages::get_all_devices_description)) {
-        if (data.size() != 1) {
-          qDebug() << "Warning: Client" << port << ". Uncorrect request len" << data.size() << ", expected 1";
+  auto prepare_all_devices_description = [this]() {
+    QByteArray ba;
+    ba.append(static_cast<char>(messages::all_devices_description));
+    ba.append(4, 0x00); // Резервируем место для поля "длина сообщения"
+
+    auto copy_table_contents_to_byte_array = [](QByteArray& ba, const table_description& table) {
+      QSqlQuery query("SELECT " + table.fields + " FROM " + table.name);
+      while (query.next()) {
+        QString name = table.name;
+        name.resize(name.size() - 1);
+        ba += name.toUtf8();
+
+        for (int i = 0; query.value(i).isValid(); ++i) {
+          ba += static_cast<char>(delimiters::end_of_word);
+          ba += query.value(i).toString().toUtf8();
         }
-        // TODO: Готовим и отправляем ответ (QByteArray или std::vector<char>... ?
-        QByteArray ba;
-        ba.append(static_cast<char>(messages::all_devices_description));
-        tcp_server_->send_to_client(port, ba);
-      } else {
-        qDebug() << "Warning: Client" << port << ". Unknown request type, skip it";
+        ba += static_cast<char>(delimiters::end_of_row);
       }
+    };
+
+    for (const auto& table : tables_) {
+      copy_table_contents_to_byte_array(ba, table);
     }
-  });
+
+    std::uint32_t len = htonl(ba.length());
+    Q_ASSERT(ba.length() >= 5);
+    memcpy(ba.data() + 1, &len, sizeof(len));
+
+    return ba;
+  };
+
+  connect(tcp_server_, &tcp_server::have_data,
+          [this, prepare_all_devices_description](std::vector<char>& data, std::uint16_t port) {
+            if (!data.empty()) {
+              if (data.at(0) == static_cast<char>(messages::get_all_devices_description)) {
+                if (data.size() != 1) {
+                  qDebug() << "Warning: Client" << port << ". Uncorrect request len" << data.size() << ", expected 1";
+                }
+                QByteArray ba = prepare_all_devices_description();
+                tcp_server_->send_to_client(port, ba);
+              } else {
+                qDebug() << "Warning: Client" << port << ". Unknown request type, skip it";
+              }
+            }
+          });
 }
 
 

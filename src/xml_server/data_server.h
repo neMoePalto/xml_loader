@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
 
 #include <QObject>
 #include <QString>
@@ -23,6 +24,13 @@ private:
   const std::uint16_t connection_limit_ = 10;
   const std::uint16_t port_             = 20205;
   const QString       xml_path_         = "../xml_files/";
+
+  struct table_description {
+    QString name;
+    QString fields;
+  };
+
+  const QList<table_description> tables_;
 };
 
 }

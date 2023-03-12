@@ -1,7 +1,5 @@
 #include "tcp_server.h"
 
-#include <cassert>
-
 #include <QDataStream>
 #include <QDebug>
 #include <QTcpServer>
@@ -92,7 +90,7 @@ void tcp_server::accept_connection() {
 
 void tcp_server::read() {
   auto* sock = dynamic_cast<QTcpSocket*>(this->sender());
-  assert(sock);
+  Q_ASSERT(sock);
 
   QDataStream in(sock);
   in.setVersion(QDataStream::Qt_5_7); // TODO: Свериться с целевой ОС

@@ -24,6 +24,9 @@ public:
   void slot_client_restart();
 
 private:
+  void change_connection_status(Qt::GlobalColor status, std::uint16_t server_port);
+
+private:
   std::unique_ptr<tcp_smart_client> tcp_client_;
   net_settings_dialog*              settings_widget_;
   QPushButton*                      connection_status_pb_;

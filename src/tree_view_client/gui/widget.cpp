@@ -1,5 +1,9 @@
 #include "widget.h"
 
+#include <netinet/in.h>
+#include <string.h>
+
+#include <QByteArray>
 #include <QDebug>
 #include <QGridLayout>
 #include <QPushButton>
@@ -23,12 +27,13 @@ widget::widget(QWidget *parent)
   tree_view->setMinimumSize(300, 400);
 
   connection_status_pb_ = new QPushButton();
-  connection_status_pb_->setPalette(Qt::GlobalColor::red);
-  connection_status_pb_->setText(tr("Подключение к серверу..."));
+  connection_status_pb_->setMinimumSize(200, 55);
 
   auto* settings_pb = new QPushButton(tr("Изменить\nсетевые настройки"));
   settings_pb->setMinimumSize(160, 70);
   settings_widget_ = new net_settings_dialog(this);
+
+  change_connection_status(Qt::GlobalColor::red, settings_widget_->port());
 
   auto* send_request_pb = new QPushButton(tr("Запрос конфигурации\nвсех устройств"));
   output_te_ = new QTextEdit(this);
@@ -48,13 +53,36 @@ widget::widget(QWidget *parent)
   });
 
   connect(send_request_pb, &QPushButton::clicked, [this]() {
-    assert(tcp_client_);
+    Q_ASSERT(tcp_client_);
 
     QByteArray req;
-    // TODO: Позже - сократить namespace (т.к. класс войдет в него):
-    req.append(static_cast<char>(xml_loader::messages::get_all_devices_description));
+    req.append(static_cast<char>(messages::get_all_devices_description));
     if (tcp_client_->send_to_server(req) == -1) {
       output_te_->append("tcp_smart_client: Data sending failed");
+    }
+  });
+
+  connect(tcp_client_.get(), &tcp_smart_client::have_data, [this](const QByteArray& ba) {
+    Q_ASSERT(!ba.isEmpty());
+
+    if (ba.at(0) == static_cast<char>(messages::all_devices_description)) {
+      std::uint32_t len = 0;
+      if (ba.size() >= 5) {
+        memcpy(&len, ba.data() + 1, sizeof(len));
+        len = htonl(len);
+      } else {
+        qDebug() << "Warning: Uncorrect reply len" << ba.size() << ", skip it";
+      }
+
+      if (ba.size() != len) {
+        qDebug() << "Warning: Uncorrect reply len (header value =" << len << "instead" << ba.size() << "), skip it";
+      } else {
+
+//      QByteArray ba = prepare_all_devices_description();
+//      tcp_server_->send_to_client(port, ba);
+      }
+    } else {
+      qDebug() << "Warning: Unknown reply type, skip it";
     }
   });
 }
@@ -69,14 +97,11 @@ void widget::slot_client_restart() {
                                                    settings_widget_->port());
 
   connect(tcp_client_.get(), &tcp_smart_client::connected, [this]() {
-    connection_status_pb_->setPalette(Qt::GlobalColor::green);
-    connection_status_pb_->setText(tr("Соединение установлено"));
-//    qDebug() << "connected with port" << QString::number(settings_widget_->port());
+    change_connection_status(Qt::GlobalColor::green, settings_widget_->port());
   });
 
   connect(tcp_client_.get(), &tcp_smart_client::disconnected, [this]() {
-    connection_status_pb_->setPalette(Qt::GlobalColor::red);
-    connection_status_pb_->setText(tr("Подключение к серверу..."));
+    change_connection_status(Qt::GlobalColor::red, settings_widget_->port());
   });
 
   connect(tcp_client_.get(), &tcp_smart_client::connection_error, [this](QString info) {
@@ -84,6 +109,17 @@ void widget::slot_client_restart() {
   });
 
   settings_widget_->hide();
+}
+
+
+void widget::change_connection_status(Qt::GlobalColor status, std::uint16_t server_port) {
+  connection_status_pb_->setPalette(status);
+
+  QString s = status == Qt::GlobalColor::red ? QString{QString{"Подключение к серверу\nчерез порт "} +
+                                                       QString::number(server_port) + "..."}
+                                             : QString{QString{"Соединение с портом\n"} +
+                                                       QString::number(server_port) + " установлено"};
+  connection_status_pb_->setText(s);
 }
 
 }

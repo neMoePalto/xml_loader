@@ -1,7 +1,5 @@
 #include "net_settings_dialog.h"
 
-#include <cassert>
-
 #include <QGridLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -42,7 +40,7 @@ net_settings_dialog::net_settings_dialog(widget* parent)
   grid->addWidget(apply_settings_pb, 3, 1,   1, 1);
   setLayout(grid);
 
-  assert(parent);
+  Q_ASSERT(parent);
   connect(apply_settings_pb, &QPushButton::clicked, parent, &widget::slot_client_restart);
 }
 
