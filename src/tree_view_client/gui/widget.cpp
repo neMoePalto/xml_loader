@@ -1,14 +1,18 @@
 #include "widget.h"
 
+#include <map>
+
 #include <netinet/in.h>
 #include <string.h>
 
-#include <QByteArray>
 #include <QDebug>
 #include <QGridLayout>
 #include <QPushButton>
+#include <QString>
+#include <QStringList>
 #include <QTextEdit>
-#include <QTreeView>
+#include <QTreeWidget>
+#include <QTreeWidgetItem>
 
 #include "../shared/messages.h"
 #include "gui/net_settings_dialog.h"
@@ -23,8 +27,9 @@ widget::widget(QWidget *parent)
   QFont noto_sans_11("Noto Sans", 11, QFont::Normal);
   setFont(noto_sans_11);
 
-  auto* tree_view = new QTreeView();
-  tree_view->setMinimumSize(300, 400);
+  tree_widget_ = new QTreeWidget();
+  tree_widget_->setMinimumSize(900, 400);
+  tree_widget_->setColumnCount(9);
 
   connection_status_pb_ = new QPushButton();
   connection_status_pb_->setMinimumSize(200, 55);
@@ -39,11 +44,11 @@ widget::widget(QWidget *parent)
   output_te_ = new QTextEdit(this);
 
   auto* grid = new QGridLayout(this);
-  grid->addWidget(tree_view,             0, 0,   8, 2);
-  grid->addWidget(connection_status_pb_, 0, 2,   1, 1, Qt::AlignTop);
-  grid->addWidget(settings_pb,           0, 3,   1, 1, Qt::AlignTop);
-  grid->addWidget(output_te_,            1, 2,   6, 2);
-  grid->addWidget(send_request_pb,       7, 2,   1, 2);
+  grid->addWidget(tree_widget_,          0, 0,   8, 6);
+  grid->addWidget(connection_status_pb_, 0, 6,   1, 1, Qt::AlignTop);
+  grid->addWidget(settings_pb,           0, 7,   1, 1, Qt::AlignTop);
+  grid->addWidget(output_te_,            1, 6,   6, 2);
+  grid->addWidget(send_request_pb,       7, 6,   1, 2);
   setLayout(grid);
 
   slot_client_restart();
@@ -62,7 +67,7 @@ widget::widget(QWidget *parent)
     }
   });
 
-  connect(tcp_client_.get(), &tcp_smart_client::have_data, [this](const QByteArray& ba) {
+  connect(tcp_client_.get(), &tcp_smart_client::have_data, [this](QByteArray ba) {
     Q_ASSERT(!ba.isEmpty());
 
     if (ba.at(0) == static_cast<char>(messages::all_devices_description)) {
@@ -77,9 +82,13 @@ widget::widget(QWidget *parent)
       if (ba.size() != len) {
         qDebug() << "Warning: Uncorrect reply len (header value =" << len << "instead" << ba.size() << "), skip it";
       } else {
+        ba.replace(0, 5, "");
 
-//      QByteArray ba = prepare_all_devices_description();
-//      tcp_server_->send_to_client(port, ba);
+        QList<QByteArray> rows = ba.split(static_cast<char>(delimiters::end_of_row));
+        if (rows.last().isEmpty()) {
+          rows.removeLast();
+        }
+        update_tree_widget(rows);
       }
     } else {
       qDebug() << "Warning: Unknown reply type, skip it";
@@ -109,6 +118,66 @@ void widget::slot_client_restart() {
   });
 
   settings_widget_->hide();
+}
+
+
+void widget::update_tree_widget(const QList<QByteArray>& rows) {
+  tree_widget_->clear();
+
+  struct item_with_id {
+    QString id;
+    QTreeWidgetItem* item = nullptr;
+  };
+
+  std::map<QString, QTreeWidgetItem*>  blocks;
+  std::multimap<QString, item_with_id> boards;
+  std::multimap<QString, item_with_id> ports;
+
+  for (const auto& r : rows) {
+    QList<QByteArray> words = r.split(static_cast<char>(delimiters::end_of_word));
+    QStringList row_data;
+    for (const auto& w : words) {
+      row_data << w;
+    }
+
+    if (row_data.size() > 1) {
+      QString row_type = row_data.value(0);
+      if (row_type == "block") {
+        QTreeWidgetItem* item = new QTreeWidgetItem(row_data);
+        blocks.insert({row_data.value(1), item});
+      } else if (row_type == "board") {
+        QString parent_id = row_data.last();
+        row_data.removeLast();
+        QTreeWidgetItem* item = new QTreeWidgetItem(row_data);
+        boards.insert({parent_id, {row_data.value(1), item}});
+      } else if (row_type == "port") {
+        QString parent_id = row_data.last();
+        row_data.removeLast();
+        QTreeWidgetItem* item = new QTreeWidgetItem(row_data);
+        ports.insert({parent_id, {row_data.value(1), item}});
+      } else {
+        qDebug() << "Error: Unknown row type while reply parsing, skip it";
+      }
+    }
+  }
+
+  QList<QTreeWidgetItem*> items;
+  for (const auto& bl : blocks) {
+    const auto b_range = boards.equal_range(bl.first);
+    for (auto it = b_range.first; it != b_range.second; ++it) {
+      bl.second->addChild(it->second.item);
+    }
+    items.append(bl.second);
+  }
+
+  for (const auto& board : boards) {
+    const auto ports_range = ports.equal_range(board.second.id);
+    for (auto it = ports_range.first; it != ports_range.second; ++it) {
+      board.second.item->addChild(it->second.item);
+    }
+  }
+
+  tree_widget_->insertTopLevelItems(0, items);
 }
 
 
