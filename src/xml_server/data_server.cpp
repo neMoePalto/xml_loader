@@ -21,8 +21,9 @@
 namespace xml_loader {
 
 
-data_server::data_server()
-  : tables_{{"blocks", "id, Name, IP, BoardCount, MtR, MtC, Description, Label"},
+data_server::data_server(QObject* parent)
+  : QObject(parent)
+  , tables_{{"blocks", "id, Name, IP, BoardCount, MtR, MtC, Description, Label"},
             {"boards", "id, Num, Name, PortCount, IntLinks, Algoritms, block_id"},
             {"ports",  "id, Num, Media, Signal, board_id"}} {
   // Подключаемся к БД:
@@ -232,7 +233,7 @@ data_server::data_server()
   }
 
   // Запускаем tcp-сервер:
-  tcp_server_ = new tcp_server(connection_limit_); // TODO: Пробросить this в ctor
+  tcp_server_ = new tcp_server(connection_limit_, this);
   tcp_server_->restart(port_);
 
   connect(tcp_server_, &tcp_server::client_connected, [](const std::uint16_t port) {
@@ -275,8 +276,8 @@ data_server::data_server()
   };
 
   connect(tcp_server_, &tcp_server::have_data,
-          [this, prepare_all_devices_description](std::vector<char>& data, std::uint16_t port) {
-            if (!data.empty()) {
+          [this, prepare_all_devices_description](QByteArray data, std::uint16_t port) {
+            if (!data.isEmpty()) {
               if (data.at(0) == static_cast<char>(messages::get_all_devices_description)) {
                 if (data.size() != 1) {
                   qDebug() << "Warning: Client" << port << ". Uncorrect request len" << data.size() << ", expected 1";
@@ -288,11 +289,6 @@ data_server::data_server()
               }
             }
           });
-}
-
-
-data_server::~data_server() {
-  delete tcp_server_;
 }
 
 }

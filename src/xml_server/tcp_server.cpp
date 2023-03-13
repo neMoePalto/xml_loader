@@ -9,17 +9,12 @@
 namespace xml_loader {
 
 
-tcp_server::tcp_server(std::uint16_t connection_limit)
-  : connection_limit_(connection_limit) {
+tcp_server::tcp_server(std::uint16_t connection_limit, QObject* parent)
+  : QObject(parent)
+  , connection_limit_(connection_limit) {
   server_ = new QTcpServer(this);
 
   connect(server_, &QTcpServer::newConnection, this, &tcp_server::accept_connection);
-}
-
-
-tcp_server::~tcp_server() {
-  close(); // Без этого метода тоже работает
-  qDebug() << "TcpServer::~dtor() called";
 }
 
 
@@ -51,7 +46,7 @@ void tcp_server::send_to_client(std::uint16_t port_to, const QByteArray& data) {
 void tcp_server::open(std::uint16_t port) {
   if (server_->listen(QHostAddress::Any, port)) {
     emit listen_port(server_->serverPort());
-    qDebug() << "Started to listen port " << port; // TODO: Удалить позже
+    qDebug() << "Listening port" << port;
   } else {
     if (server_->serverError() == QAbstractSocket::AddressInUseError) {
       qDebug() << "This port is already in use! Can't start the server!";
@@ -92,13 +87,8 @@ void tcp_server::read() {
   auto* sock = dynamic_cast<QTcpSocket*>(this->sender());
   Q_ASSERT(sock);
 
-  QDataStream in(sock);
-  in.setVersion(QDataStream::Qt_5_7); // TODO: Свериться с целевой ОС
-  auto len = static_cast<std::size_t>(sock->bytesAvailable());
-
-  buff_.resize(len);
-  in.readRawData(buff_.data(), len);
-  emit have_data(buff_, sock->peerPort());
+  QByteArray buff = sock->readAll();
+  emit have_data(buff, sock->peerPort());
 }
 
 

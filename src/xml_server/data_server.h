@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 
+#include <QList>
 #include <QObject>
 #include <QString>
 
@@ -16,8 +17,7 @@ class data_server : public QObject {
   Q_OBJECT
 
 public:
-  data_server();
-  ~data_server(); // Temp !
+  explicit data_server(QObject* parent = nullptr);
 
 private:
   tcp_server*         tcp_server_;

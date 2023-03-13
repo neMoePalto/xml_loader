@@ -24,7 +24,6 @@ tcp_smart_client::tcp_smart_client(QHostAddress server_ip, std::uint16_t server_
 
 tcp_smart_client::~tcp_smart_client() {
   emit disconnected();
-  qDebug() << "tcp_smart_client::~dtor()"; // TODO: Delete later
 }
 
 

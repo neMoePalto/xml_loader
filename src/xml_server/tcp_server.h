@@ -17,8 +17,7 @@ class tcp_server : public QObject {
   Q_OBJECT
 
 public:
-  explicit tcp_server(std::uint16_t connection_limit);
-  ~tcp_server(); // Delete later !
+  explicit tcp_server(std::uint16_t connection_limit, QObject* parent = nullptr);
 
   void restart(std::uint16_t port);
   void close();
@@ -27,7 +26,7 @@ public:
 signals:
   void client_connected(std::uint16_t port_from);
   void client_disconnected(std::uint16_t port_from);
-  void have_data(std::vector<char>& data, std::uint16_t port_from); // TODO: Или исп. QByteArray ?
+  void have_data(QByteArray data, std::uint16_t port_from);
   void port_is_busy();
   void listen_port(std::uint16_t port);
 
