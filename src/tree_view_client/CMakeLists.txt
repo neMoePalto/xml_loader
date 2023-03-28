@@ -15,6 +15,7 @@ find_package(Qt5 REQUIRED COMPONENTS
 )
 
 set(PROJECT_SOURCES
+  ../shared/messages.h
   gui/net_settings_dialog.cpp
   gui/net_settings_dialog.h
   gui/widget.cpp
